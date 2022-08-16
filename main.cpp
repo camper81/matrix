@@ -1,6 +1,7 @@
 #include <list>
 #include <map>
 #include <iostream>
+#include <iomanip>
 
 template<typename T, T DefaultValue = -1>
 class Matrix{
@@ -118,7 +119,7 @@ public:
 };
 
 int main() {
-    Matrix<int, -2> main_matrix;
+    Matrix<int, -1> main_matrix;
     const int n = 10;
     // fill main diagonal
     for(int i = 0; i < n; i++) {
@@ -130,10 +131,9 @@ int main() {
         main_matrix[i][n - i - 1] = i;
     }
     std::cout << "Matrix:" << std::endl;
-    for(int i = 1; i < n-1; i++) {
-        for(int j = 1; j < n-1; j++) {
-            if(j > 1) std::cout << " ";
-            std::cout << main_matrix[i][j];
+    for(int i = 1; i < n - 1; ++i) {
+        for(int j = 1; j < n - 1; ++j) {
+            std::cout << std::setw(2)<< main_matrix[i][j] << " ";
         }
         std::cout << std::endl;
     }
