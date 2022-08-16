@@ -1,216 +1,124 @@
-#include <vector>
+#include <list>
 #include <map>
-#include <cassert>
 #include <iostream>
-#include <map>
-#include <memory>
 
-template<typename T, T>
-class Matrix;
-
-template<typename T, T DefaultValue>
-class SubMatrix {
+template<typename T, T DefaultValue = -1>
+class Matrix{
 public:
-    class MatrixElement {
+    class SubMatrix{
     public:
-        MatrixElement(){
-            data = DefaultValue;
-            idx = -1;
-            matrix_pointer = nullptr;
+        struct Element{
+            size_t row_ = -1;
+            size_t col_ = -1;
+            T value_;
+            SubMatrix* parent_ = nullptr;
+            // Для создания связного списка
+            Element* next = nullptr;
+
+            operator T() const{
+                return value_;
+            }
+
+            void operator=(T value){
+                value_ = value;
+                // оповещаем родителя, что появился новый элемент у которого есть значение
+                parent_->setLastElement(this);
+            }
+            // Преобразования в кортеж
+            std::tuple<size_t, size_t, T> getTuple(){
+                return std::tie(row_, col_, value_);
+            }
         };
-        MatrixElement(T data_, int id_, Matrix<T, DefaultValue> *matrix_ptr_) :
-                data{data_}, idx{id_}, matrix_pointer(matrix_ptr_) {
 
+        SubMatrix(Matrix* parent = nullptr): parent_(parent){};
+
+        SubMatrix& operator=(SubMatrix& sub){
+            this = sub;
         }
 
-        operator T() const {
-            return data;
+        Element& operator[](size_t col){
+            // Проброс номера колонки из предыдущего оператора [] вызванного из Matrix
+            size_t row = parent_->last_input_row_;
+            // Перебираем подряд все элементы
+            for(auto it = elements.begin(), end = elements.end(); it != end; ++it)
+                // Если элемент с такой адресацией найден то возвращаем его
+                if(it->row_ == row && it->col_ == col)
+                    return *it;
+
+            // Если не найден то создаём новый со стандартными значениями(это необходимо если дальее эта ячейка будет
+            // использоваться для занесения в неё значений)
+            elements.push_back({row, col, DefaultValue, this});
+            return elements.back();
         }
 
-        MatrixElement& operator=(const T& rhs) {
-            value = true;
-            data = rhs;
+        void setLastElement(Element* element){
+            // У родителя увеличиваем количество элементов которые имеют значения
+            parent_->elements_size_++;
+            // Далее заполняем LinkedList у родителя
+            if(parent_->elements_ == nullptr){
+                // Для первого элемента в списке
+                parent_->elements_ = element;
+                return;
+            }
 
-            if (data != DefaultValue)
-                matrix_pointer->move_to_known(idx);
-//            else
-//                matrix_pointer->move_to_unknown(idx);
-
-            return *this;
+            auto cur_elem = parent_->elements_;
+            while(cur_elem->next)
+                cur_elem = cur_elem->next;
+            cur_elem->next = element;
         }
 
-        T item() const {
-            return data;
-        }
-
-        bool operator!=(const T rhs) const {
-            return data != rhs;
-        }
-
-        bool operator!=(const MatrixElement rhs) const {
-            return data != rhs.data;
-        }
-
-    private:
-        T data;
-    public:
-        void setData(T data) {
-            MatrixElement::data = data;
-        }
-
-        void setMatrixPointer(SubMatrix<T, DefaultValue> *matrixPointer) {
-            matrix_pointer = matrixPointer;
-        }
-
-        void setIdx(int idx) {
-            MatrixElement::idx = idx;
-        }
-
-    private:
-        SubMatrix<T, DefaultValue> *matrix_pointer;
-        int idx;
-    public:
-        bool isValue() const {
-            return value;
-        }
-
-    private:
-        bool value = false;
+        std::list<Element> elements; // Список элементов
+        Matrix* parent_;
     };
 
-
-    MatrixElement& operator[](const int idx) {
-        if (elements.count(idx) == 0) {
-            if (elements.count(idx) > 0)
-                return elements.at(idx);
-////            MatrixElement element(DefaultValue, idx, this);
-//            other[idx].setData(DefaultValue);
-//            other[idx].setMatrixPointer(this);
-//            other[idx].setIdx(idx);
-////            return elements[idx];
-//              return other[idx];
+    SubMatrix& operator[](const size_t& row){
+        last_input_row_ = row;
+        SubMatrix sub(this);
+        submatrix.insert(std::pair(row, sub));
+        return submatrix[row];
+    }
+    std::tuple<size_t, size_t, T> getElement(size_t idx){
+        auto cur_elem = elements_;
+        while(idx--){
+            cur_elem = cur_elem->next;
         }
-        return tempElement;
-    }
-
-    size_t size() const {
-        return elements.size();
-    }
-
-    SubMatrix& operator=(const T& rhs) {
-        if (this == &rhs)
-            return *this;
-        elements = rhs.elements;
-        return *this;
-    }
-
-    std::tuple<int, T> get(int elem_num) const {
-        int i = 0;
-        for (const auto&[key, value]:elements) {
-            if (i == elem_num) {
-                return std::make_tuple(key, T(value));
-            } else {
-                i++;
-            }
-        }
-        throw std::out_of_range("No such element");
-    }
-
-private:
-    std::map<int, MatrixElement> elements;
-    std::map<int, MatrixElement> other;
-    MatrixElement tempElement;
-//    std::map<int, MatrixElement> elements_temp;
-
-    void move_to_known(int idx) {
-//        if (elements_temp.count(idx) > 0) {
-            elements.insert(std::make_pair(idx, elements.at(idx)));
-//            elements_temp.erase(idx);
-//        }
-    }
-
-//    void move_to_unknown(int idx) {
-//        if (elements.count(idx) > 0) {
-//            elements.erase(idx);
-//        }
-//    }
-
-};
-
-template<typename T, T DefaultValue>
-class Matrix {
+        return cur_elem->getTuple();
+    };
 public:
-    Matrix() = default;
+    struct iterator{
+        iterator(size_t elem_count, Matrix* parent) : position_(elem_count), parent_(parent) {};
+        iterator& operator++(){
+            position_++;
+            return *this;
+        }
+        bool operator!=(iterator other){
+            return position_ != other.position_;
+        }
+        auto operator*(){
+            return parent_->getElement(position_);
+        }
+        size_t position_;
+        Matrix* parent_;
+    };
+    iterator begin(){
+        return iterator(0, this);
+    }
+    iterator end(){
+        return iterator(elements_size_, this);
+    }
 
     size_t size() const {
-        size_t result = 0;
-        for (const auto&[key, value]:elements) {
-            result += value.size();
-        }
-        return result;
+        return elements_size_;
     }
 
-
-
-    SubMatrix<T, DefaultValue>& operator[](const int idx) {
-        return elements[idx];
-    }
-
-    Matrix& operator=(const T& rhs) {
-        if (this == &rhs)
-            return *this;
-        elements = rhs.elements;
-        return *this;
-    }
-
-    decltype(auto) get(size_t elem_num) const {
-        int i = 0;
-        for (const auto&[key, value]:elements) {
-            size_t cur_size = value.size();
-            if (i + cur_size > elem_num) {
-                return std::tuple_cat(std::make_tuple(key), value.get(elem_num - i));
-            } else {
-                i += cur_size;
-            }
-        }
-        throw std::logic_error("no element");
-    }
-
-    class iterator {
-    public:
-        using value_type = Matrix;
-        using pointer = Matrix *;
-
-        iterator(Matrix& parent, int elem_num_) : parent_(parent), elem_num(elem_num_) {}
-
-        iterator operator++() {
-            iterator i = *this;
-            elem_num++;
-            return i;
-        }
-
-        decltype(auto) operator*() { return parent_.get(elem_num); }
-
-        bool operator!=(const iterator& rhs) { return elem_num != rhs.elem_num; }
-
-    private:
-        int elem_num;
-        Matrix& parent_;
-    };
-
-    iterator begin() {
-        return iterator(*this, 0);
-    }
-
-    iterator end() {
-        return iterator(*this, size());
-    }
-private:
-    std::map<int, SubMatrix<T, DefaultValue>> elements;
+    size_t last_input_row_;
+    size_t elements_size_ = 0;
+    typename SubMatrix::Element* elements_;
+    std::map<size_t, SubMatrix> submatrix;
 };
 
 int main() {
-    Matrix<int, -1> main_matrix;
+    Matrix<int, -2> main_matrix;
     const int n = 10;
     // fill main diagonal
     for(int i = 0; i < n; i++) {
